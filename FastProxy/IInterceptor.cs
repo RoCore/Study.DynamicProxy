@@ -6,6 +6,6 @@ namespace FastProxy
 {
     public interface IInterceptor
     {
-        object InterceptorInvokeAsync(InterceptorValues values);
+        object Invoke(InterceptorValues values);
     }
 }

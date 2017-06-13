@@ -2,9 +2,11 @@
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
+using System.Linq.Expressions;
 using System.Reflection;
 using System.Reflection.Emit;
 using System.Threading;
+using System.Threading.Tasks;
 #if(NETSTANDARD1_6)
 using Microsoft.Extensions.Caching.Memory;
 #else
@@ -25,24 +27,25 @@ namespace FastProxy
 
 #if (NETSTANDARD1_6)
         private static readonly IMemoryCache MemoryCache = new MemoryCache(new MemoryCacheOptions());
-#else
-        private static readonly ConcurrentDictionary<string, TypeBuilder> Cache = new ConcurrentDictionary<string, TypeBuilder>();
-#endif
+
         private static TypeBuilder GetCacheValue<TBase, T, TInterceptor>(string key, ModuleBuilder builders)
             where TInterceptor : IInterceptor, new()
         {
-#if (NETSTANDARD1_6)
-            return MemoryCache.GetOrCreate(typeof(T).FullName, a =>
+            return MemoryCache.GetOrCreate(key, a =>
             {
                 a.SlidingExpiration = TimeSpan.FromMinutes(10);
                 return builders.CreateType<TBase, T, TInterceptor>();
             });
-#elif(NETCLASSIC)
-            return Cache.GetOrAdd(key, a => builders.CreateType<TBase, T, TInterceptor>());
-#else
-            throw new NotImplementedException();
-#endif
         }
+#else
+        private static readonly ConcurrentDictionary<string, TypeBuilder> Cache = new ConcurrentDictionary<string, TypeBuilder>();
+
+        private static TypeBuilder GetCacheValue<TBase, T, TInterceptor>(string key, ModuleBuilder builders)
+            where TInterceptor : IInterceptor, new()
+        {
+            return Cache.GetOrAdd(key, a => builders.CreateType<TBase, T, TInterceptor>());
+        }
+#endif
 
         public static T Build<T, TInterceptor>()
             where TInterceptor : IInterceptor, new()
@@ -158,6 +161,48 @@ namespace FastProxy
 
         }
 
+        private static MethodInfo EmptyTaskCall { get; } = typeof(Task).GetMethod(nameof(Task.FromResult), BindingFlags.Static | BindingFlags.Public).MakeGenericMethod(typeof(object));
+        private static ConstructorInfo TaskWithResult { get; } = typeof(Task<object>).GetConstructor(new[] { typeof(Func<object, object>), typeof(object) });
+        private static ConstructorInfo AnonymousFuncForTask { get; } = typeof(Func<object, object>).GetConstructor(new[] { typeof(object), typeof(IntPtr) });
+
+        private static Type InterceptorValuesType { get; } = typeof(InterceptorValues);
+        private static ConstructorInfo InterceptorValuesConstructor { get; } = typeof(InterceptorValues).GetConstructor(new[] { typeof(object), typeof(string), typeof(IEnumerable), typeof(Task<object>) });
+        private static MethodInfo InvokeInterceptor { get; } = typeof(IInterceptor).GetMethod(nameof(IInterceptor.Invoke));
+
+
+        private static MethodBuilder CreateBaseCallForTask(this TypeBuilder builder, MethodInfo baseMethod, long counter, ParameterInfo[] parameters)
+        {
+            var result = builder.DefineMethod(string.Concat(baseMethod.Name, "_Execute_", counter), MethodAttributes.Private | MethodAttributes.HideBySig, typeof(object), new[] { typeof(object) });
+
+            var generator = result.GetILGenerator();
+
+            var items = generator.DeclareLocal(typeof(object[]));
+            if (parameters.Length > 0)
+            {
+                generator.Emit(OpCodes.Ldarg_1);
+                generator.Emit(OpCodes.Castclass, items.LocalType);
+                generator.Emit(OpCodes.Stloc_0);
+                generator.Emit(OpCodes.Ldarg_0); //this.
+                generator.Emit(OpCodes.Ldloc_0); //items
+            }
+
+            for (int i = 0; i < parameters.Length; i++)
+            {
+                generator.Emit(OpCodes.Ldc_I4, i);
+                generator.Emit(OpCodes.Ldelem_Ref);
+                if (parameters[i].ParameterType != typeof(object))
+                {
+                    OpCode casting = parameters[i].ParameterType.GetTypeInfo().IsValueType ? OpCodes.Unbox_Any : OpCodes.Castclass;
+                    generator.Emit(casting, parameters[i].ParameterType);
+                }
+            }
+            //(params ...)
+            generator.Emit(OpCodes.Call, baseMethod);
+            generator.Emit(OpCodes.Ret);
+
+            return result;
+        }
+
         private static void CreateMethods<TInterceptor>(this TypeBuilder builder, MethodInfo[] methods, FieldBuilder decorator, bool isInterfaceType, FieldBuilder interceptorInvoker)
             where TInterceptor : IInterceptor, new()
         {
@@ -165,8 +210,7 @@ namespace FastProxy
             {
                 throw new ArgumentNullException(nameof(interceptorInvoker));
             }
-            var interecptor = typeof(TInterceptor).GetMethod(nameof(IInterceptor.InterceptorInvokeAsync));
-
+            long methodCounter = 0;
             foreach (var item in methods)
             {
                 MethodAttributes attributes = item.Attributes;
@@ -180,6 +224,11 @@ namespace FastProxy
                 }
                 var parameters = item.GetParameters();
                 var method = builder.DefineMethod(item.Name, attributes, item.CallingConvention, item.ReturnType, parameters.Select(a => a.ParameterType).ToArray());
+                MethodBuilder taskMethod = null;
+                if ((item.IsAbstract || isInterfaceType) == false)
+                {
+                    taskMethod = builder.CreateBaseCallForTask(method, methodCounter, parameters);
+                }
                 if (item.ContainsGenericParameters)
                 {
                     //TODO
@@ -187,62 +236,63 @@ namespace FastProxy
                     throw new NotImplementedException();
                 }
                 var generator = method.GetILGenerator();
-                if (decorator != null)
-                {
 
+                var listType = typeof(object[]);
+
+                //object[] items; {0}
+                var items = generator.DeclareLocal(listType);
+                //Task<object> task; {1}
+                var taskOfObject = generator.DeclareLocal(typeof(Task<object>));
+                //InterceptorValues interceptorValues; {2}
+                var interceptorValues = generator.DeclareLocal(InterceptorValuesType);
+
+                generator.Emit(OpCodes.Ldc_I4, parameters.Length);
+                generator.Emit(OpCodes.Newarr, typeof(object));
+                generator.Emit(OpCodes.Stloc_0);
+                for (int i = 0; i < parameters.Length; i++)
+                {
+                    generator.Emit(OpCodes.Ldloc_0); //items.
+                    generator.Emit(OpCodes.Ldc_I4, i);
+                    generator.Emit(OpCodes.Ldarg, i + 1); // method arg by index i + 1
+                    generator.Emit(OpCodes.Stelem_Ref); // items[x] = X;
                 }
-                if (method.ReturnType == typeof(void))
+                if (taskMethod == null)
                 {
-                    if (isInterfaceType)
-                    {
-                        var values = typeof(InterceptorValues);
-                        var constructor = values.GetConstructor(new[] { typeof(object), typeof(string), typeof(IEnumerable) });
-                        var listType = typeof(List<object>);
-                        var addMethod = listType.GetMethod(nameof(List<object>.Add));
-                        var list = generator.DeclareLocal(listType);
-                        //var list = new List<object>();
-                        generator.Emit(OpCodes.Newobj, listType.GetConstructor(Type.EmptyTypes));
-                        generator.Emit(OpCodes.Stloc_0, list);
-                        generator.Emit(OpCodes.Nop);
-                        for (int i = 0; i < parameters.Length; i++)
-                        {
-                            OpCode code;
-                            switch (i)
-                            {
-                                case 0:
-                                    code = OpCodes.Ldarg_0; break;
-                                case 1:
-                                    code = OpCodes.Ldarg_1; break;
-                                case 2:
-                                    code = OpCodes.Ldarg_2; break;
-                                case 3:
-                                    code = OpCodes.Ldarg_3; break;
-                                default:
-                                    code = OpCodes.Ldarg_S; break;
-                            }
-                            //list.Add(argumentX);
-                            generator.Emit(OpCodes.Ldloc_0);
-                            generator.Emit(OpCodes.Ldarg_S, i);
-                            generator.Emit(OpCodes.Callvirt, addMethod);
-                            generator.Emit(OpCodes.Nop);
-                        }
-
-                        //this._proxyInvoker(new InterceptorValues(this, "MethodName", list));
-                        generator.Emit(OpCodes.Ldarg_0);
-                        generator.Emit(OpCodes.Ldfld, interceptorInvoker);
-                        generator.Emit(OpCodes.Ldarg_0);
-                        generator.Emit(OpCodes.Ldstr, method.Name);
-                        generator.Emit(OpCodes.Ldloc_0);
-                        generator.Emit(OpCodes.Newobj, constructor);
-                        generator.Emit(OpCodes.Callvirt, interecptor);
-                        generator.Emit(OpCodes.Pop);
-                        generator.Emit(OpCodes.Ret);
-                    }
+                    //Task.FromResult<object>(null);
+                    generator.Emit(OpCodes.Ldnull);
+                    generator.Emit(OpCodes.Call, EmptyTaskCall);
                 }
                 else
                 {
-
+                    // new Task<object>([proxyMethod], items);
+                    generator.Emit(OpCodes.Ldarg_0); //this
+                    generator.Emit(OpCodes.Ldftn, taskMethod);
+                    generator.Emit(OpCodes.Newobj, AnonymousFuncForTask);
+                    generator.Emit(OpCodes.Ldloc_0); // load items
+                    generator.Emit(OpCodes.Newobj, TaskWithResult);
                 }
+                //task = {see above}
+                generator.Emit(OpCodes.Stloc_1, taskOfObject);
+
+                //interceptorValues = new InterceptorValues(this, "[MethodName]", items, task);
+                generator.Emit(OpCodes.Ldarg_0);
+                generator.Emit(OpCodes.Ldstr, method.Name);
+                generator.Emit(OpCodes.Ldloc_0);
+                generator.Emit(OpCodes.Ldloc_1);
+                generator.Emit(OpCodes.Newobj, InterceptorValuesConstructor);
+                generator.Emit(OpCodes.Stloc_2, interceptorValues);
+
+                if (method.ReturnType != typeof(void))
+                {
+                    generator.Emit(OpCodes.Ldarg_0);
+                    generator.Emit(OpCodes.Ldfld, interceptorInvoker);
+                    generator.Emit(OpCodes.Ldloc_2);
+                    generator.Emit(OpCodes.Callvirt, InvokeInterceptor);
+                    OpCode casting = method.ReturnType.GetTypeInfo().IsValueType ? OpCodes.Unbox_Any : OpCodes.Castclass;
+                    generator.Emit(casting, method.ReturnType);
+                }
+                generator.Emit(OpCodes.Ret);
+                methodCounter++;
             }
         }
     }
