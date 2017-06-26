@@ -40,11 +40,38 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="..\FastProxy\Definitions\IAfterInvokeInterceptor.cs">
+      <Link>Definitions\IAfterInvokeInterceptor.cs</Link>
+    </Compile>
+    <Compile Include="..\FastProxy\Definitions\IBeforeCollectInterceptorInformation.cs">
+      <Link>Definitions\IBeforeCollectInterceptorInformation.cs</Link>
+    </Compile>
+    <Compile Include="..\FastProxy\Definitions\IBeforeInvokeInterceptor.cs">
+      <Link>Definitions\IBeforeInvokeInterceptor.cs</Link>
+    </Compile>
+    <Compile Include="..\FastProxy\Definitions\IInterceptor.cs">
+      <Link>Definitions\IInterceptor.cs</Link>
+    </Compile>
+    <Compile Include="..\FastProxy\Definitions\IProxyMethodBuilder.cs">
+      <Link>Definitions\IProxyMethodBuilder.cs</Link>
+    </Compile>
+    <Compile Include="..\FastProxy\Definitions\IProxyTypeBuilder.cs">
+      <Link>Definitions\IProxyTypeBuilder.cs</Link>
+    </Compile>
     <Compile Include="..\FastProxy\DynamicTypeBuilder.cs">
       <Link>DynamicTypeBuilder.cs</Link>
     </Compile>
-    <Compile Include="..\FastProxy\IInterceptor.cs">
-      <Link>IInterceptor.cs</Link>
+    <Compile Include="..\FastProxy\Helpers\Delegates.cs">
+      <Link>Helpers\Delegates.cs</Link>
+    </Compile>
+    <Compile Include="..\FastProxy\Helpers\MissingConstructionInformation.cs">
+      <Link>Helpers\MissingConstructionInformation.cs</Link>
+    </Compile>
+    <Compile Include="..\FastProxy\Helpers\ProxyMethodBuilderTransientParameters.cs">
+      <Link>Helpers\ProxyMethodBuilderTransientParameters.cs</Link>
+    </Compile>
+    <Compile Include="..\FastProxy\Helpers\ProxyTypeBuilderTransientParameters.cs">
+      <Link>Helpers\ProxyTypeBuilderTransientParameters.cs</Link>
     </Compile>
     <Compile Include="..\FastProxy\InterceptorValues.cs">
       <Link>InterceptorValues.cs</Link>

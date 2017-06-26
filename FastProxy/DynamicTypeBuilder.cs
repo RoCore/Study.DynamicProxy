@@ -7,6 +7,7 @@ using System.Reflection;
 using System.Reflection.Emit;
 using System.Threading;
 using System.Threading.Tasks;
+using FastProxy.Definitions;
 #if(NETSTANDARD1_6)
 using Microsoft.Extensions.Caching.Memory;
 #else
@@ -94,10 +95,10 @@ namespace FastProxy
         private static TypeBuilder CreateType<TBase, T, TInterceptor>(this ModuleBuilder moduleBuilder)
             where TInterceptor : IInterceptor, new()
         {
-            var baseType = typeof(TBase);
-            var implentedType = typeof(T);
-            var typeInfoImplemented = implentedType.GetTypeInfo();
-            if (typeInfoImplemented.IsClass && typeInfoImplemented.IsSealed && baseType == implentedType)
+            var abstractType = typeof(TBase);
+            var concreteType = typeof(T);
+            var typeInfoImplemented = concreteType.GetTypeInfo();
+            if (typeInfoImplemented.IsClass && typeInfoImplemented.IsSealed && abstractType == concreteType)
             {
                 throw new InvalidOperationException("Not possible to create a proxy if base type is sealed");
             }
@@ -111,13 +112,13 @@ namespace FastProxy
             {
                 if (typeInfoImplemented.IsSealed)
                 {
-                    result = moduleBuilder.DefineType(string.Concat(ProxyPrefix, baseType.Name), TypeAttributes.Public | TypeAttributes.Class, baseType);
-                    decorator = result.DefineField(DecoratorName, baseType, FieldAttributes.InitOnly);
+                    result = moduleBuilder.DefineType(string.Concat(ProxyPrefix, abstractType.Name), TypeAttributes.Public | TypeAttributes.Class, abstractType);
+                    decorator = result.DefineField(DecoratorName, abstractType, FieldAttributes.InitOnly);
 
                     var constructor = result.DefineConstructor(MethodAttributes.Public, CallingConventions.Standard, Type.EmptyTypes);
                     var ilGenerator = constructor.GetILGenerator();
                     ilGenerator.Emit(OpCodes.Ldarg_0);
-                    ilGenerator.Emit(OpCodes.Newobj, baseType.GetConstructor(Type.EmptyTypes));
+                    ilGenerator.Emit(OpCodes.Newobj, abstractType.GetConstructor(Type.EmptyTypes));
                     ilGenerator.Emit(OpCodes.Stfld, decorator);
                     interceptorInvoker = result.CreateProxyInvokerInConstuctor<TInterceptor>(ilGenerator);
                     ilGenerator.Emit(OpCodes.Ret);
@@ -125,18 +126,18 @@ namespace FastProxy
                 }
                 else
                 {
-                    result = moduleBuilder.DefineType(string.Concat(ProxyPrefix, baseType.Name), TypeAttributes.Public | TypeAttributes.Class, implentedType);
-                    result.SetParent(baseType);
+                    result = moduleBuilder.DefineType(string.Concat(ProxyPrefix, abstractType.Name), TypeAttributes.Public | TypeAttributes.Class, concreteType);
+                    result.SetParent(abstractType);
                 }
-                methods = baseType.GetMethods(BindingFlags.Instance);
-                properties = baseType.GetProperties(BindingFlags.Instance | BindingFlags.Public);
+                methods = abstractType.GetMethods(BindingFlags.Instance);
+                properties = abstractType.GetProperties(BindingFlags.Instance | BindingFlags.Public);
             }
             else if (typeInfoImplemented.IsInterface)
             {
-                result = moduleBuilder.DefineType(string.Concat(ProxyPrefix, baseType.Name), TypeAttributes.Public | TypeAttributes.Class);
-                result.AddInterfaceImplementation(baseType);
-                methods = baseType.GetMethods();
-                properties = baseType.GetProperties();
+                result = moduleBuilder.DefineType(string.Concat(ProxyPrefix, abstractType.Name), TypeAttributes.Public | TypeAttributes.Class);
+                result.AddInterfaceImplementation(abstractType);
+                methods = abstractType.GetMethods();
+                properties = abstractType.GetProperties();
             }
             else
             {
@@ -166,11 +167,11 @@ namespace FastProxy
         private static ConstructorInfo AnonymousFuncForTask { get; } = typeof(Func<object, object>).GetConstructor(new[] { typeof(object), typeof(IntPtr) });
 
         private static Type InterceptorValuesType { get; } = typeof(InterceptorValues);
-        private static ConstructorInfo InterceptorValuesConstructor { get; } = typeof(InterceptorValues).GetConstructor(new[] { typeof(object), typeof(string), typeof(IEnumerable), typeof(Task<object>) });
+        private static ConstructorInfo InterceptorValuesConstructor { get; } = typeof(InterceptorValues).GetConstructor(new[] { typeof(object), typeof(object), typeof(string), typeof(object[]), typeof(Task<object>) });
         private static MethodInfo InvokeInterceptor { get; } = typeof(IInterceptor).GetMethod(nameof(IInterceptor.Invoke));
 
 
-        private static MethodBuilder CreateBaseCallForTask(this TypeBuilder builder, MethodInfo baseMethod, long counter, ParameterInfo[] parameters)
+        public static MethodBuilder CreateBaseCallForTask(this TypeBuilder builder, MethodInfo baseMethod, long counter, ParameterInfo[] parameters, FieldBuilder decorator)
         {
             var result = builder.DefineMethod(string.Concat(baseMethod.Name, "_Execute_", counter), MethodAttributes.Private | MethodAttributes.HideBySig, typeof(object), new[] { typeof(object) });
 
@@ -182,9 +183,15 @@ namespace FastProxy
                 generator.Emit(OpCodes.Ldarg_1);
                 generator.Emit(OpCodes.Castclass, items.LocalType);
                 generator.Emit(OpCodes.Stloc_0);
-                generator.Emit(OpCodes.Ldarg_0); //this.
-                generator.Emit(OpCodes.Ldloc_0); //items
             }
+            var methodCall = OpCodes.Call;
+            generator.Emit(OpCodes.Ldarg_0); //base.
+            if (decorator != null)
+            {
+                methodCall = OpCodes.Callvirt;
+                generator.Emit(OpCodes.Ldfld, decorator); //_decorator
+            }
+            generator.Emit(OpCodes.Ldloc_0); //items
 
             for (int i = 0; i < parameters.Length; i++)
             {
@@ -197,7 +204,7 @@ namespace FastProxy
                 }
             }
             //(params ...)
-            generator.Emit(OpCodes.Call, baseMethod);
+            generator.Emit(methodCall, baseMethod);
             generator.Emit(OpCodes.Ret);
 
             return result;
@@ -227,7 +234,7 @@ namespace FastProxy
                 MethodBuilder taskMethod = null;
                 if ((item.IsAbstract || isInterfaceType) == false)
                 {
-                    taskMethod = builder.CreateBaseCallForTask(method, methodCounter, parameters);
+                    taskMethod = builder.CreateBaseCallForTask(method, methodCounter, parameters, decorator);
                 }
                 if (item.ContainsGenericParameters)
                 {
@@ -240,11 +247,11 @@ namespace FastProxy
                 var listType = typeof(object[]);
 
                 //object[] items; {0}
-                var items = generator.DeclareLocal(listType);
+                generator.DeclareLocal(listType);
                 //Task<object> task; {1}
-                var taskOfObject = generator.DeclareLocal(typeof(Task<object>));
+                generator.DeclareLocal(typeof(Task<object>));
                 //InterceptorValues interceptorValues; {2}
-                var interceptorValues = generator.DeclareLocal(InterceptorValuesType);
+                generator.DeclareLocal(InterceptorValuesType);
 
                 generator.Emit(OpCodes.Ldc_I4, parameters.Length);
                 generator.Emit(OpCodes.Newarr, typeof(object));
@@ -253,13 +260,13 @@ namespace FastProxy
                 {
                     generator.Emit(OpCodes.Ldloc_0); //items.
                     generator.Emit(OpCodes.Ldc_I4, i);
-                    generator.Emit(OpCodes.Ldarg, i + 1); // method arg by index i + 1
+                    generator.Emit(OpCodes.Ldarg, i + 1); // method arg by index i + 1 since ldarg_0 == this
                     generator.Emit(OpCodes.Stelem_Ref); // items[x] = X;
                 }
                 if (taskMethod == null)
                 {
-                    //Task.FromResult<object>(null);
-                    generator.Emit(OpCodes.Ldnull);
+                    EmitDefaultValue(method.ReturnType, generator);
+                    generator.Emit(OpCodes.Box, method.ReturnType);
                     generator.Emit(OpCodes.Call, EmptyTaskCall);
                 }
                 else
@@ -272,15 +279,23 @@ namespace FastProxy
                     generator.Emit(OpCodes.Newobj, TaskWithResult);
                 }
                 //task = {see above}
-                generator.Emit(OpCodes.Stloc_1, taskOfObject);
+                generator.Emit(OpCodes.Stloc_1);
 
-                //interceptorValues = new InterceptorValues(this, "[MethodName]", items, task);
+                //interceptorValues = new InterceptorValues(this, [null|decorator], "[MethodName]", items, task);
                 generator.Emit(OpCodes.Ldarg_0);
+                if (decorator != null)
+                {
+                    generator.Emit(OpCodes.Ldfld, decorator);
+                }
+                else
+                {
+                    generator.Emit(OpCodes.Ldnull);
+                }
                 generator.Emit(OpCodes.Ldstr, method.Name);
                 generator.Emit(OpCodes.Ldloc_0);
                 generator.Emit(OpCodes.Ldloc_1);
                 generator.Emit(OpCodes.Newobj, InterceptorValuesConstructor);
-                generator.Emit(OpCodes.Stloc_2, interceptorValues);
+                generator.Emit(OpCodes.Stloc_2);
 
                 if (method.ReturnType != typeof(void))
                 {
@@ -293,6 +308,56 @@ namespace FastProxy
                 }
                 generator.Emit(OpCodes.Ret);
                 methodCounter++;
+            }
+        }
+
+
+        private static readonly HashSet<Type> IntegerInitializable = new HashSet<Type>
+        {
+            typeof(bool),
+            typeof(byte),
+            typeof(char),
+            typeof(int),
+            typeof(sbyte),
+            typeof(short),
+            typeof(uint),
+            typeof(ushort)
+        };
+
+        private static readonly HashSet<Type> LongInitializable = new HashSet<Type>
+        {
+            typeof(long),
+            typeof(ulong)
+        };
+
+
+        private static void EmitDefaultValue(Type type, ILGenerator generator)
+        {
+            if (IntegerInitializable.Contains(type) || type.GetTypeInfo().IsEnum)
+            {
+                generator.Emit(OpCodes.Ldc_I4_0);
+            }
+            else if (LongInitializable.Contains(type))
+            {
+                generator.Emit(OpCodes.Ldc_I8, 0L);
+            }
+            else if (type == typeof(float))
+            {
+                generator.Emit(OpCodes.Ldc_R4, 0f);
+            }
+            else if (type == typeof(double))
+            {
+                generator.Emit(OpCodes.Ldc_R8, 0D);
+            }
+            else if (type.GetTypeInfo().IsValueType)
+            {
+                //custom structs and other non nummeric
+                generator.Emit(OpCodes.Initobj, type);
+            }
+            else
+            {
+                //class
+                generator.Emit(OpCodes.Ldnull);
             }
         }
     }
