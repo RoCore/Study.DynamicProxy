@@ -21,7 +21,7 @@ namespace FastProxy.Test
 
         public abstract class Test2 : Test1
         {
-            protected readonly Interceptor ProxyInterceptor;
+            protected readonly IInterceptor ProxyInterceptor;
 
             public Test2()
             {
@@ -57,11 +57,30 @@ namespace FastProxy.Test
                                  (object)lst[4],
                                  (object)lst[5]);
             }
+
+            //public Test3()
+            //{
+            //    Value = new Test3();
+            //}
+
+            //public Test3(Test2 value) : this()
+            //{
+            //    Value = value;
+            //}
+
             public override string Test(string t, object value, object va, object sd, object sdsd, object asda)
             {
-                var items = new [] { t, value, va, sd, sdsd, asda };
+                //var items = new[] { t, value, va, sd, sdsd, asda };
+                var items = new object[6];
+                items[0] = t;
+                items[1] = value;
+                items[2] = va;
+                items[3] = sd;
+                items[4] = sdsd;
+                items[5] = asda;
+
                 var task = new Task<object>(executeTest, items);
-                var interceptorValues = new InterceptorValues(this, null, "Test", items, task);
+                var interceptorValues = new InterceptionInformation(this, null, "Test", items, task);
                 return (string)ProxyInterceptor.Invoke(interceptorValues);
             }
 
@@ -69,7 +88,7 @@ namespace FastProxy.Test
             {
                 var items = new object[0];
                 var task = Task.FromResult<object>(default(int));
-                var interceptorValues = new InterceptorValues(this, null, "Test", items, task);
+                var interceptorValues = new InterceptionInformation(this, null, "Test", items, task);
                 var result = (int?)ProxyInterceptor.Invoke(interceptorValues);
                 return result.GetValueOrDefault();
             }
@@ -87,7 +106,7 @@ namespace FastProxy.Test
 
         public class Interceptor : IInterceptor
         {
-            public object Invoke(InterceptorValues callDescription)
+            public object Invoke(InterceptionInformation callDescription)
             {
                 return callDescription.Next().Result;
             }
@@ -120,7 +139,7 @@ namespace FastProxy.Test
         [ExpectedException(typeof(InvalidOperationException))]
         public void CreateProxyFailed()
         {
-            var result = DynamicTypeBuilder.Build<Test3, Interceptor>();
+            var result = ProxyFactory.Default.CreateProxy<Test3, Interceptor>();
         }
 
 
@@ -145,7 +164,7 @@ namespace FastProxy.Test
             var watchNativeImplementedInterceptorWatch = new Stopwatch();
             var watchNative = new Stopwatch();
             var nproxy = new Stopwatch();
-            var result = DynamicTypeBuilder.Build<Test1, Interceptor>();
+            var result = ProxyFactory.Default.CreateProxy<Test1, Interceptor>();
             var native = new TestXY();
             var nativeImplementedInterceptor = new Test3();
             int total = value;
@@ -155,7 +174,7 @@ namespace FastProxy.Test
             while (total-- > 0)
             {
                 watch.Start();
-                result.Test("1", null, 1, 1L,122, .0d);
+                result.X();//Test("1", null, 1, 1L, 122, .0d);
                 watch.Stop();
 
                 watchNative.Start();

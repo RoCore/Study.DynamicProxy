@@ -52,14 +52,17 @@
     <Compile Include="..\FastProxy\Definitions\IInterceptor.cs">
       <Link>Definitions\IInterceptor.cs</Link>
     </Compile>
+    <Compile Include="..\FastProxy\Definitions\IProxyInfo.cs">
+      <Link>Definitions\IProxyInfo.cs</Link>
+    </Compile>
     <Compile Include="..\FastProxy\Definitions\IProxyMethodBuilder.cs">
       <Link>Definitions\IProxyMethodBuilder.cs</Link>
     </Compile>
     <Compile Include="..\FastProxy\Definitions\IProxyTypeBuilder.cs">
       <Link>Definitions\IProxyTypeBuilder.cs</Link>
     </Compile>
-    <Compile Include="..\FastProxy\DynamicTypeBuilder.cs">
-      <Link>DynamicTypeBuilder.cs</Link>
+    <Compile Include="..\FastProxy\Extensions.cs">
+      <Link>Extensions.cs</Link>
     </Compile>
     <Compile Include="..\FastProxy\Helpers\Delegates.cs">
       <Link>Helpers\Delegates.cs</Link>
@@ -73,10 +76,23 @@
     <Compile Include="..\FastProxy\Helpers\ProxyTypeBuilderTransientParameters.cs">
       <Link>Helpers\ProxyTypeBuilderTransientParameters.cs</Link>
     </Compile>
-    <Compile Include="..\FastProxy\InterceptorValues.cs">
-      <Link>InterceptorValues.cs</Link>
+    <Compile Include="..\FastProxy\InterceptionInformation.cs">
+      <Link>InterceptionInformation.cs</Link>
+    </Compile>
+    <Compile Include="..\FastProxy\ProxyFactory.cs">
+      <Link>ProxyFactory.cs</Link>
+    </Compile>
+    <Compile Include="..\FastProxy\ProxyInfo.cs">
+      <Link>ProxyInfo.cs</Link>
+    </Compile>
+    <Compile Include="..\FastProxy\ProxyMethodBuilder.cs">
+      <Link>ProxyMethodBuilder.cs</Link>
+    </Compile>
+    <Compile Include="..\FastProxy\ProxyTypeBuilder.cs">
+      <Link>ProxyTypeBuilder.cs</Link>
     </Compile>
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
+  <ItemGroup />
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>

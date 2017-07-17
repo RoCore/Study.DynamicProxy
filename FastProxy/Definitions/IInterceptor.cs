@@ -2,6 +2,6 @@
 {
     public interface IInterceptor
     {
-        object Invoke(InterceptorValues callDescription);
+        object Invoke(InterceptionInformation callDescription);
     }
 }

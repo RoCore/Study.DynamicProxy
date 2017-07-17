@@ -16,8 +16,8 @@ namespace FastProxy
         private static ConstructorInfo TaskWithResult { get; } = typeof(Task<object>).GetConstructor(new[] { typeof(Func<object, object>), typeof(object) });
         private static ConstructorInfo AnonymousFuncForTask { get; } = typeof(Func<object, object>).GetConstructor(new[] { typeof(object), typeof(IntPtr) });
 
-        private static Type InterceptorValuesType { get; } = typeof(InterceptorValues);
-        private static ConstructorInfo InterceptorValuesConstructor { get; } = typeof(InterceptorValues).GetConstructor(new[] { typeof(object), typeof(object), typeof(string), typeof(object[]), typeof(Task<object>) });
+        private static Type InterceptorValuesType { get; } = typeof(InterceptionInformation);
+        private static ConstructorInfo InterceptorValuesConstructor { get; } = typeof(InterceptionInformation).GetConstructor(new[] { typeof(object), typeof(object), typeof(string), typeof(object[]), typeof(Task<object>) });
         private static MethodInfo InvokeInterceptor { get; } = typeof(IInterceptor).GetMethod(nameof(IInterceptor.Invoke));
         #endregion
 
@@ -59,7 +59,6 @@ namespace FastProxy
             {
                 item.Execute(transient.TypeBuilder, transient.SealedTypeDecorator, transient.InterceptorDecorator, methodInfo, transient.PreInvoke, transient.PostInvoke);
             }
-
             generator.Emit(OpCodes.Ldc_I4, parameters.Length);
             generator.Emit(OpCodes.Newarr, typeof(object));
             generator.Emit(OpCodes.Stloc_0);
@@ -70,21 +69,25 @@ namespace FastProxy
                 generator.Emit(OpCodes.Ldarg, i + 1); // method arg by index i + 1 since ldarg_0 == this
                 generator.Emit(OpCodes.Stelem_Ref); // items[x] = X;
             }
-            if (taskMethod == null)
-            {
-                EmitDefaultValue(method.ReturnType, generator);
-                generator.Emit(OpCodes.Box, method.ReturnType);
-                generator.Emit(OpCodes.Call, EmptyTaskCall);
-            }
-            else
-            {
-                // new Task<object>([proxyMethod], items);
-                generator.Emit(OpCodes.Ldarg_0); //this
-                generator.Emit(OpCodes.Ldftn, taskMethod);
-                generator.Emit(OpCodes.Newobj, AnonymousFuncForTask);
-                generator.Emit(OpCodes.Ldloc_0); // load items
-                generator.Emit(OpCodes.Newobj, TaskWithResult);
-            }
+
+            EmitDefaultValue(method.ReturnType, generator);
+            generator.Emit(OpCodes.Box, method.ReturnType);
+            generator.Emit(OpCodes.Call, EmptyTaskCall);
+            //if (taskMethod == null)
+            //{
+            //    EmitDefaultValue(method.ReturnType, generator);
+            //    generator.Emit(OpCodes.Box, method.ReturnType);
+            //    generator.Emit(OpCodes.Call, EmptyTaskCall);
+            //}
+            //else
+            //{
+            //    // new Task<object>([proxyMethod], items);
+            //    generator.Emit(OpCodes.Ldarg_0); //this
+            //    generator.Emit(OpCodes.Ldftn, taskMethod);
+            //    generator.Emit(OpCodes.Newobj, AnonymousFuncForTask);
+            //    generator.Emit(OpCodes.Ldloc_0); // load items
+            //    generator.Emit(OpCodes.Newobj, TaskWithResult);
+            //}
             //task = {see above}
             generator.Emit(OpCodes.Stloc_1);
 

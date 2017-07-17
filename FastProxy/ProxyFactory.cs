@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq.Expressions;
 using System.Reflection;
 using System.Reflection.Emit;
 using System.Threading;
@@ -40,7 +41,7 @@ namespace FastProxy
         private readonly List<IBeforeCollectInterceptorInformation> _preInit = new List<IBeforeCollectInterceptorInformation>();
         private readonly List<IBeforeInvokeInterceptor> _preInvoke = new List<IBeforeInvokeInterceptor>();
         private readonly List<IAfterInvokeInterceptor> _postInvoke = new List<IAfterInvokeInterceptor>();
-        private readonly Dictionary<int, TypeInfo> _cache = new Dictionary<int, TypeInfo>();
+        private readonly Dictionary<int, IProxyInfo> _cache = new Dictionary<int, IProxyInfo>();
 
 
         private static AssemblyBuilder _builder;
@@ -75,10 +76,11 @@ namespace FastProxy
         /// <typeparam name="TInterceptor">Interceptor type</typeparam>
         /// <typeparam name="TConcrete">Concrete Type of the implementation</typeparam>
         /// <returns>Type of the new Proxy object</returns>
-        public TypeInfo CreateProxy<TAbstract, TConcrete, TInterceptor>()
+        public ProxyInfo<TAbstract> CreateProxyInfo<TAbstract, TConcrete, TInterceptor>(params object[] args)
             where TInterceptor : IInterceptor, new()
+            where TConcrete : TAbstract
         {
-            TypeInfo result = null;
+            IProxyInfo result = null;
             void Create()
             {
                 CreateBuilders();
@@ -102,19 +104,42 @@ namespace FastProxy
                         PostInvoke = new List<IAfterInvokeInterceptor>(_postInvoke)
                     };
 
+
                     foreach (var item in type.Methods)
                     {
                         _methodBuilder.Create(item, input);
                     }
+                    var proxyType = type.ProxyType.CreateTypeInfo();
+                    result = new ProxyInfo<TAbstract>(
 
-                    result = type.ProxyType.CreateTypeInfo();
+                        concreteType,
+                        abstractType,
+                        proxyType,
+                        uniquePostfix,
+                        //CreateDelegate<TAbstract>(type, concreteType, args)
+                        Expression.Lambda<Func<TAbstract>>(Expression.New(proxyType.GetConstructor(Type.EmptyTypes))).Compile()
+                    );
                     _cache.Add(uniquePostfix, result);
                 }
             }
 
             LockExecuteRelease(Create);
 
-            return result;
+            return (ProxyInfo<TAbstract>)result;
+        }
+
+        private Func<TAbstract> CreateDelegate<TAbstract>(ProxyTypeBuilderTransientParameters type, Type concreteType, object[] parameters)
+        {
+            Type[] inputParameters = Type.EmptyTypes;
+            if (parameters.Length > 0 && type.IsInterfaceType == false && concreteType.GetTypeInfo().IsAbstract == false)
+            {
+                //TODO: not only parameterless
+            }
+            var dynamicMethod = new DynamicMethod($"DM$CreateDyn_{type.ProxyType.Name}", type.ProxyType.GetType(), inputParameters, _moduleBuilder, true);
+            var ilGenerator = dynamicMethod.GetILGenerator();
+            ilGenerator.Emit(OpCodes.Newobj, type.ProxyType.GetConstructor(Type.EmptyTypes));
+            ilGenerator.Emit(OpCodes.Ret);
+            return (Func<TAbstract>)dynamicMethod.CreateDelegate(typeof(Func<TAbstract>), this);
         }
 
         private static void LockExecuteRelease(Action exec)

@@ -8,17 +8,23 @@ namespace FastProxy
 {
     public static class Extensions
     {
-        /// <summary>
-        /// Create new Proxy where we have no differences between concrete and abstract type 
-        /// </summary>
-        /// <typeparam name="T"></typeparam>
-        /// <typeparam name="TInterceptor"></typeparam>
-        /// <param name="factory"></param>
-        /// <returns></returns>
-        public static TypeInfo CreateProxy<T, TInterceptor>(this ProxyFactory factory)
+        public static T CreateProxy<T, TInterceptor>(this ProxyFactory factory)
             where TInterceptor : IInterceptor, new()
         {
             return factory.CreateProxy<T, T, TInterceptor>();
+        }
+        public static TAbstract CreateProxy<TAbstract, TConcrete, TInterceptor>(this ProxyFactory factory)
+            where TInterceptor : IInterceptor, new()
+            where TConcrete : TAbstract
+        {
+            return factory.CreateProxyInfo<TAbstract, TConcrete, TInterceptor>().Generator();
+        }
+
+        public static Type CreateProxyType<TAbstract, TConcrete, TInterceptor>(this ProxyFactory factory)
+            where TInterceptor : IInterceptor, new()
+            where TConcrete : TAbstract
+        {
+            return factory.CreateProxyInfo<TAbstract, TConcrete, TInterceptor>().ProxyType?.GetType();
         }
 
         private static readonly HashSet<Type> IntegerInitializable = new HashSet<Type>

@@ -5,7 +5,7 @@ using System.Threading.Tasks;
 
 namespace FastProxy
 {
-    public class InterceptorValues
+    public class InterceptionInformation
     {
         /// <summary>
         /// actual instance of intercepted object
@@ -40,7 +40,7 @@ namespace FastProxy
         /// <param name="invokedMethod"></param>
         /// <param name="parameters"></param>
         /// <param name="next">allow async execution of original implementation</param>
-        public InterceptorValues(object instance, object sealedInstance, string invokedMethod, object[] parameters, Task<object> next)
+        public InterceptionInformation(object instance, object sealedInstance, string invokedMethod, object[] parameters, Task<object> next)
         {
             SealedInstance = sealedInstance;
             Instance = instance;

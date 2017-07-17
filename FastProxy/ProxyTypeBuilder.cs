@@ -39,6 +39,7 @@ namespace FastProxy
             {
                 throw new InvalidOperationException("Not possible to create a proxy if base type is sealed");
             }
+            
             if (typeInfoImplemented.IsClass)
             {
                 //TODO: not only empty constructors
@@ -91,7 +92,7 @@ namespace FastProxy
             CreateProxyInvokerInConstuctor(interceptorType, ilGenerator, result);
             ilGenerator.Emit(OpCodes.Ret);
 
-            CreateConstructorWithDecoratorAsParameter(abstractType, interceptorType, result);
+            //CreateConstructorWithDecoratorAsParameter(abstractType, interceptorType, result);
         }
 
         private static void CreateConstructorWithDecoratorAsParameter(Type abstractType, Type interceptorType, ProxyTypeBuilderTransientParameters result)
@@ -110,7 +111,7 @@ namespace FastProxy
         {
             if (result.InterceptorInvoker == null)
             {
-                result.InterceptorInvoker = result.ProxyType.DefineField(ProxyInvoker, interceptorType, FieldAttributes.InitOnly);
+                result.InterceptorInvoker = result.ProxyType.DefineField(ProxyInvoker, typeof(IInterceptor), FieldAttributes.InitOnly);
             }
             generator.Emit(OpCodes.Ldarg_0);
             generator.Emit(OpCodes.Newobj, interceptorType.GetConstructor(Type.EmptyTypes));
