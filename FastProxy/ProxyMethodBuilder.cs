@@ -73,21 +73,21 @@ namespace FastProxy
             EmitDefaultValue(method.ReturnType, generator);
             generator.Emit(OpCodes.Box, method.ReturnType);
             generator.Emit(OpCodes.Call, EmptyTaskCall);
-            //if (taskMethod == null)
-            //{
-            //    EmitDefaultValue(method.ReturnType, generator);
-            //    generator.Emit(OpCodes.Box, method.ReturnType);
-            //    generator.Emit(OpCodes.Call, EmptyTaskCall);
-            //}
-            //else
-            //{
-            //    // new Task<object>([proxyMethod], items);
-            //    generator.Emit(OpCodes.Ldarg_0); //this
-            //    generator.Emit(OpCodes.Ldftn, taskMethod);
-            //    generator.Emit(OpCodes.Newobj, AnonymousFuncForTask);
-            //    generator.Emit(OpCodes.Ldloc_0); // load items
-            //    generator.Emit(OpCodes.Newobj, TaskWithResult);
-            //}
+            if (taskMethod == null)
+            {
+                EmitDefaultValue(method.ReturnType, generator);
+                generator.Emit(OpCodes.Box, method.ReturnType);
+                generator.Emit(OpCodes.Call, EmptyTaskCall);
+            }
+            else
+            {
+                // new Task<object>([proxyMethod], items);
+                generator.Emit(OpCodes.Ldarg_0); //this
+                generator.Emit(OpCodes.Ldftn, taskMethod);
+                generator.Emit(OpCodes.Newobj, AnonymousFuncForTask);
+                generator.Emit(OpCodes.Ldloc_0); // load items
+                generator.Emit(OpCodes.Newobj, TaskWithResult);
+            }
             //task = {see above}
             generator.Emit(OpCodes.Stloc_1);
 

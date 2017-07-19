@@ -1,5 +1,8 @@
 ﻿using System.Reflection;
 using System.Reflection.Emit;
+#if (!NETSTANDARD1_6)
+using System.Diagnostics.SymbolStore;
+#endif
 namespace FastProxy.Helpers
 {
     public class ProxyTypeBuilderTransientParameters
@@ -10,5 +13,9 @@ namespace FastProxy.Helpers
         public FieldBuilder InterceptorInvoker { get; set; }
         public bool IsInterfaceType { get; set; }
         public TypeBuilder ProxyType { get; set; }
+        
+#if (!NETSTANDARD1_6)
+        public ISymbolDocumentWriter SymbolDocument { get; set; }
+#endif
     }
 }

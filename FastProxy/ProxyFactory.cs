@@ -117,6 +117,7 @@ namespace FastProxy
                         proxyType,
                         uniquePostfix,
                         //CreateDelegate<TAbstract>(type, concreteType, args)
+                        //https://rogerjohansson.blog/2008/02/28/linq-expressions-creating-objects/ => useful?
                         Expression.Lambda<Func<TAbstract>>(Expression.New(proxyType.GetConstructor(Type.EmptyTypes))).Compile()
                     );
                     _cache.Add(uniquePostfix, result);

@@ -1,4 +1,7 @@
 ﻿using System;
+#if (!NETSTANDARD1_6)
+using System.Diagnostics.SymbolStore;
+#endif
 using System.Reflection;
 using System.Reflection.Emit;
 using FastProxy.Definitions;
@@ -31,7 +34,9 @@ namespace FastProxy
             {
                 throw new MissingConstructionInformation(nameof(moduleBuilder), MissingConstructionInformation.TypeDefintion.ModuleBuilder);
             }
-
+#if (!NETSTANDARD1_6)
+            result.SymbolDocument = moduleBuilder.DefineDocument(abstractType.FullName + ".pdb", SymDocumentType.Text, SymLanguageType.ILAssembly, SymLanguageVendor.Microsoft);
+#endif
             var typeInfoImplemented = concreteType.GetTypeInfo();
             result.IsInterfaceType = typeInfoImplemented.IsInterface;
             var defaultConstructorImplemented = false;
@@ -39,7 +44,7 @@ namespace FastProxy
             {
                 throw new InvalidOperationException("Not possible to create a proxy if base type is sealed");
             }
-            
+
             if (typeInfoImplemented.IsClass)
             {
                 //TODO: not only empty constructors
@@ -89,10 +94,16 @@ namespace FastProxy
             ilGenerator.Emit(OpCodes.Ldarg_0);
             ilGenerator.Emit(OpCodes.Newobj, concreteType.GetConstructor(Type.EmptyTypes));
             ilGenerator.Emit(OpCodes.Stfld, result.Decorator);
+#if (!NETSTANDARD1_6)
+            ilGenerator.MarkSequencePoint(result.SymbolDocument, 1, 1, 1, 100);
+#endif
             CreateProxyInvokerInConstuctor(interceptorType, ilGenerator, result);
             ilGenerator.Emit(OpCodes.Ret);
+#if (!NETSTANDARD1_6)
+            ilGenerator.MarkSequencePoint(result.SymbolDocument, 2, 1, 1, 100);
+#endif
 
-            //CreateConstructorWithDecoratorAsParameter(abstractType, interceptorType, result);
+            CreateConstructorWithDecoratorAsParameter(abstractType, interceptorType, result);
         }
 
         private static void CreateConstructorWithDecoratorAsParameter(Type abstractType, Type interceptorType, ProxyTypeBuilderTransientParameters result)
@@ -116,6 +127,9 @@ namespace FastProxy
             generator.Emit(OpCodes.Ldarg_0);
             generator.Emit(OpCodes.Newobj, interceptorType.GetConstructor(Type.EmptyTypes));
             generator.Emit(OpCodes.Stfld, result.InterceptorInvoker);
+#if (!NETSTANDARD1_6)
+            generator.MarkSequencePoint(result.SymbolDocument, 1, 1, 1, 100);
+#endif
         }
     }
 }
