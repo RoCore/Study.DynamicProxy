@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Reflection;
 using System.Reflection.Emit;
 using FastProxy.Definitions;
@@ -17,7 +18,7 @@ namespace FastProxy
             where TInterceptor : IInterceptor, new()
             where TConcrete : TAbstract
         {
-            return factory.CreateProxyInfo<TAbstract, TConcrete, TInterceptor>().Generator();
+            return factory.CreateProxyInfo<TAbstract, TConcrete, TInterceptor>().CreateInstance();
         }
 
         public static Type CreateProxyType<TAbstract, TConcrete, TInterceptor>(this ProxyFactory factory)
@@ -48,6 +49,10 @@ namespace FastProxy
 
         public static void EmitDefaultValue(Type type, ILGenerator generator)
         {
+            if (type == typeof(void))
+            {
+                return;
+            }
             if (IntegerInitializable.Contains(type) || type.GetTypeInfo().IsEnum)
             {
                 generator.Emit(OpCodes.Ldc_I4_0);
@@ -64,12 +69,16 @@ namespace FastProxy
             {
                 generator.Emit(OpCodes.Ldc_R8, 0D);
             }
-            else if (type.GetTypeInfo().IsValueType)
+            else if (type == typeof(decimal))
+            {
+                generator.Emit(OpCodes.Ldsfld, typeof(decimal).GetField(nameof(decimal.Zero)));
+            }
+            else if (type.IsValueType)
             {
                 //custom structs and other non nummeric
                 generator.Emit(OpCodes.Initobj, type);
             }
-            else
+            else if(type.IsClass)
             {
                 //class
                 generator.Emit(OpCodes.Ldnull);

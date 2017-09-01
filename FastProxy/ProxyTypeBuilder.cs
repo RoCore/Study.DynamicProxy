@@ -34,8 +34,8 @@ namespace FastProxy
             {
                 throw new MissingConstructionInformation(nameof(moduleBuilder), MissingConstructionInformation.TypeDefintion.ModuleBuilder);
             }
-#if (!NETSTANDARD1_6)
-            result.SymbolDocument = moduleBuilder.DefineDocument(abstractType.FullName + ".pdb", SymDocumentType.Text, SymLanguageType.ILAssembly, SymLanguageVendor.Microsoft);
+#if (!NETSTANDARD2_0)
+            result.SymbolDocument = moduleBuilder.DefineDocument(abstractType.FullName + ".il", SymDocumentType.Text, SymLanguageType.ILAssembly, SymLanguageVendor.Microsoft);
 #endif
             var typeInfoImplemented = concreteType.GetTypeInfo();
             result.IsInterfaceType = typeInfoImplemented.IsInterface;
@@ -58,8 +58,16 @@ namespace FastProxy
                     result.ProxyType = moduleBuilder.DefineType(string.Concat(ProxyPrefix, abstractType.Name, postfix), TypeAttributes.Public | TypeAttributes.Class, concreteType);
                     result.ProxyType.SetParent(abstractType);
                 }
-                result.Methods = abstractType.GetMethods(BindingFlags.Instance);
-                result.Properties = abstractType.GetProperties(BindingFlags.Instance | BindingFlags.Public);
+                if (abstractType.IsInterface)
+                {
+                    result.Methods = abstractType.GetMethods();
+                    result.Properties = abstractType.GetProperties();
+                }
+                else
+                {
+                    result.Methods = abstractType.GetMethods(BindingFlags.Instance);
+                    result.Properties = abstractType.GetProperties(BindingFlags.Instance | BindingFlags.Public);
+                }
             }
             else if (typeInfoImplemented.IsInterface)
             {
@@ -86,7 +94,17 @@ namespace FastProxy
 
         private static void CreateSealedType(Type abstractType, Type concreteType, Type interceptorType, ModuleBuilder moduleBuilder, ProxyTypeBuilderTransientParameters result, string postfix)
         {
-            result.ProxyType = moduleBuilder.DefineType(string.Concat(ProxyPrefix, abstractType.Name, postfix), TypeAttributes.Public | TypeAttributes.Class, abstractType);
+            if (abstractType.IsInterface)
+            {
+                result.ProxyType = moduleBuilder.DefineType(string.Concat(ProxyPrefix, abstractType.Name, postfix),
+                    TypeAttributes.Public | TypeAttributes.Class);
+                result.ProxyType.AddInterfaceImplementation(abstractType);
+            }
+            else
+            {
+                result.ProxyType = moduleBuilder.DefineType(string.Concat(ProxyPrefix, abstractType.Name, postfix),
+                    TypeAttributes.Public | TypeAttributes.Class, abstractType);
+            }
             result.Decorator = result.ProxyType.DefineField(DecoratorName, abstractType, FieldAttributes.InitOnly);
 
             var constructor = result.ProxyType.DefineConstructor(MethodAttributes.Public, CallingConventions.Standard, Type.EmptyTypes);
@@ -94,12 +112,12 @@ namespace FastProxy
             ilGenerator.Emit(OpCodes.Ldarg_0);
             ilGenerator.Emit(OpCodes.Newobj, concreteType.GetConstructor(Type.EmptyTypes));
             ilGenerator.Emit(OpCodes.Stfld, result.Decorator);
-#if (!NETSTANDARD1_6)
+#if (!NETSTANDARD2_0)
             ilGenerator.MarkSequencePoint(result.SymbolDocument, 1, 1, 1, 100);
 #endif
             CreateProxyInvokerInConstuctor(interceptorType, ilGenerator, result);
             ilGenerator.Emit(OpCodes.Ret);
-#if (!NETSTANDARD1_6)
+#if (!NETSTANDARD2_0)
             ilGenerator.MarkSequencePoint(result.SymbolDocument, 2, 1, 1, 100);
 #endif
 
@@ -127,7 +145,7 @@ namespace FastProxy
             generator.Emit(OpCodes.Ldarg_0);
             generator.Emit(OpCodes.Newobj, interceptorType.GetConstructor(Type.EmptyTypes));
             generator.Emit(OpCodes.Stfld, result.InterceptorInvoker);
-#if (!NETSTANDARD1_6)
+#if (!NETSTANDARD2_0)
             generator.MarkSequencePoint(result.SymbolDocument, 1, 1, 1, 100);
 #endif
         }

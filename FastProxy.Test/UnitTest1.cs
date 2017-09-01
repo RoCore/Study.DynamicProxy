@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Reflection;
+using System.Reflection.Emit;
 using System.Threading.Tasks;
 using FastProxy.Definitions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -36,7 +37,10 @@ namespace FastProxy.Test
 
             public virtual void X()
             {
-                return;
+                var items = new object[0];
+                var task = Task.FromResult(default(object));
+                var interceptorValues = new InterceptionInformation(this, null, "X", items, task);
+                ProxyInterceptor.Invoke(interceptorValues);
             }
 
             public virtual string Test(string t, object value, object va, object sd, object sdsd, object asda)
@@ -78,10 +82,10 @@ namespace FastProxy.Test
                 items[3] = sd;
                 items[4] = sdsd;
                 items[5] = asda;
-
                 var task = new Task<object>(executeTest, items);
                 var interceptorValues = new InterceptionInformation(this, null, "Test", items, task);
-                return (string)ProxyInterceptor.Invoke(interceptorValues);
+                var result = ProxyInterceptor.Invoke(interceptorValues);
+                return (string)result;
             }
 
             public override int TestX()
@@ -89,8 +93,8 @@ namespace FastProxy.Test
                 var items = new object[0];
                 var task = Task.FromResult<object>(default(int));
                 var interceptorValues = new InterceptionInformation(this, null, "Test", items, task);
-                var result = (int?)ProxyInterceptor.Invoke(interceptorValues);
-                return result.GetValueOrDefault();
+                var result = ProxyInterceptor.Invoke(interceptorValues);
+                return (int)result;
             }
             public override decimal TestY()
             {
@@ -100,7 +104,11 @@ namespace FastProxy.Test
             }
             public override void X()
             {
-                return;
+                //var items = new[] { t, value, va, sd, sdsd, asda };
+                var items = new object[0];
+                var task = new Task<object>(executeTest, items);
+                var interceptorValues = new InterceptionInformation(this, null, "X", items, task);
+                var result = ProxyInterceptor.Invoke(interceptorValues);
             }
         }
 
@@ -143,7 +151,7 @@ namespace FastProxy.Test
         }
 
 
-#if (!NETCOREAPP1_1)
+#if (!NETCOREAPP2_0)
         private class NewProxy : NProxy.Core.IInvocationHandler
         {
             public object Invoke(object target, MethodInfo methodInfo, object[] parameters)
@@ -154,9 +162,9 @@ namespace FastProxy.Test
 #endif
 
         [DataRow(1)]
-        [DataRow(1000)]
-        [DataRow(100000)]
-        [DataRow(10000000)]
+        //[DataRow(1000)]
+        //[DataRow(100000)]
+        //[DataRow(10000000)]
         [TestMethod]
         public void CreateProxy(int value)
         {
@@ -164,17 +172,17 @@ namespace FastProxy.Test
             var watchNativeImplementedInterceptorWatch = new Stopwatch();
             var watchNative = new Stopwatch();
             var nproxy = new Stopwatch();
-            var result = ProxyFactory.Default.CreateProxy<Test1, Interceptor>();
+            var result = ProxyFactory.Default.CreateProxy<Test1, Test3, Interceptor>();
             var native = new TestXY();
             var nativeImplementedInterceptor = new Test3();
             int total = value;
-#if (!NETCOREAPP1_1)
+#if (!NETCOREAPP2_0)
             var proxy = (Test1)new NProxy.Core.ProxyFactory().GetProxyTemplate(typeof(Test1), new[] { typeof(Test1) }).CreateProxy(new NewProxy());
 #endif
             while (total-- > 0)
             {
                 watch.Start();
-                result.X();//Test("1", null, 1, 1L, 122, .0d);
+                result.X();
                 watch.Stop();
 
                 watchNative.Start();
@@ -185,7 +193,7 @@ namespace FastProxy.Test
                 nativeImplementedInterceptor.Test("1", null, 1, 1L, 122, .0d);
                 watchNativeImplementedInterceptorWatch.Stop();
 
-#if (!NETCOREAPP1_1)
+#if (!NETCOREAPP2_0)
                 nproxy.Start();
                 proxy.X();
                 nproxy.Stop();

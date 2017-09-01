@@ -57,7 +57,7 @@ namespace FastProxy
 
         private int GetUniquePostfix<TAbstract, TConcrete, TInterceptor>()
         {
-            int result = typeof(TAbstract).FullName.GetHashCode() | typeof(TConcrete).FullName.GetHashCode() | typeof(TInterceptor).FullName.GetHashCode();
+            var result = typeof(TAbstract).FullName.GetHashCode() | typeof(TConcrete).FullName.GetHashCode() | typeof(TInterceptor).FullName.GetHashCode();
 
             void GenerateHashcode<T>(T item)
             {
@@ -89,11 +89,15 @@ namespace FastProxy
                 var interceptorType = typeof(TInterceptor);
 
                 var uniquePostfix = GetUniquePostfix<TAbstract, TConcrete, TInterceptor>();
+                if (uniquePostfix < 0)
+                {
+                    uniquePostfix += int.MaxValue;
+                }
                 if (_cache.TryGetValue(uniquePostfix, out result) == false)
                 {
                     var type = _typeBuilder.Create(abstractType, concreteType, interceptorType, _moduleBuilder, $"_{uniquePostfix}");
 
-                    ProxyMethodBuilderTransientParameters input = new ProxyMethodBuilderTransientParameters
+                    var input = new ProxyMethodBuilderTransientParameters
                     {
                         TypeBuilder = type.ProxyType,
                         SealedTypeDecorator = type.Decorator,
@@ -116,11 +120,12 @@ namespace FastProxy
                         abstractType,
                         proxyType,
                         uniquePostfix,
-                        //CreateDelegate<TAbstract>(type, concreteType, args)
-                        //https://rogerjohansson.blog/2008/02/28/linq-expressions-creating-objects/ => useful?
-                        Expression.Lambda<Func<TAbstract>>(Expression.New(proxyType.GetConstructor(Type.EmptyTypes))).Compile()
+                        proxyType.GetConstructors()
                     );
                     _cache.Add(uniquePostfix, result);
+#if (!NETSTANDARD2_0)
+                    _builder.Save(DynamicAssemblyName + ".dll");
+#endif
                 }
             }
 
@@ -129,26 +134,16 @@ namespace FastProxy
             return (ProxyInfo<TAbstract>)result;
         }
 
-        private Func<TAbstract> CreateDelegate<TAbstract>(ProxyTypeBuilderTransientParameters type, Type concreteType, object[] parameters)
-        {
-            Type[] inputParameters = Type.EmptyTypes;
-            if (parameters.Length > 0 && type.IsInterfaceType == false && concreteType.GetTypeInfo().IsAbstract == false)
-            {
-                //TODO: not only parameterless
-            }
-            var dynamicMethod = new DynamicMethod($"DM$CreateDyn_{type.ProxyType.Name}", type.ProxyType.GetType(), inputParameters, _moduleBuilder, true);
-            var ilGenerator = dynamicMethod.GetILGenerator();
-            ilGenerator.Emit(OpCodes.Newobj, type.ProxyType.GetConstructor(Type.EmptyTypes));
-            ilGenerator.Emit(OpCodes.Ret);
-            return (Func<TAbstract>)dynamicMethod.CreateDelegate(typeof(Func<TAbstract>), this);
-        }
-
         private static void LockExecuteRelease(Action exec)
         {
             try
             {
                 BuildersSlimLock.EnterWriteLock();
                 exec();
+            }
+            catch (Exception e)
+            {
+
             }
             finally
             {
@@ -160,9 +155,14 @@ namespace FastProxy
         {
             if (_builder == null)
             {
-                AssemblyBuilderAccess access = AssemblyBuilderAccess.Run;
-                _builder = AssemblyBuilder.DefineDynamicAssembly(new AssemblyName(DynamicAssemblyName), access);
+#if (!NETSTANDARD2_0)
+                _builder = AssemblyBuilder.DefineDynamicAssembly(new AssemblyName(DynamicAssemblyName), AssemblyBuilderAccess.RunAndSave);
+                _moduleBuilder = _builder.DefineDynamicModule(DynamicModuleName, DynamicAssemblyName + ".mod", true);
+#else 
+                var access = AssemblyBuilderAccess.Run;
+                _builder = AssemblyBuilder.DefineDynamicAssembly(new AssemblyName(DynamicAssemblyName), AssemblyBuilderAccess.Run);
                 _moduleBuilder = _builder.DefineDynamicModule(DynamicModuleName);
+#endif
             }
         }
 

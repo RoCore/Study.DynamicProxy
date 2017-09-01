@@ -1,15 +1,11 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 15
-VisualStudioVersion = 15.0.26403.7
+VisualStudioVersion = 15.0.26730.8
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FastProxy", "FastProxy\FastProxy.csproj", "{06C8D146-E31F-4D75-ABE9-D700006051C3}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "FastProxy", "FastProxy\FastProxy.csproj", "{06C8D146-E31F-4D75-ABE9-D700006051C3}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FastProxy.Test", "FastProxy.Test\FastProxy.Test.csproj", "{AF7AF278-C61B-4FDD-A391-62C3D41F8661}"
-EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FastProxy.NetClassic", "FastProxy.NetClassic\FastProxy.NetClassic.csproj", "{ED2BE024-1DEB-450B-BE56-442056460B61}"
-EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FastProxy.NetClassic.Test", "FastProxy.NetClassic.Test\FastProxy.NetClassic.Test.csproj", "{29D8A0E0-2B2A-4E1E-9408-DE216E6FB93D}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "FastProxy.Test", "FastProxy.Test\FastProxy.Test.csproj", "{AF7AF278-C61B-4FDD-A391-62C3D41F8661}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -25,16 +21,11 @@ Global
 		{AF7AF278-C61B-4FDD-A391-62C3D41F8661}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{AF7AF278-C61B-4FDD-A391-62C3D41F8661}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{AF7AF278-C61B-4FDD-A391-62C3D41F8661}.Release|Any CPU.Build.0 = Release|Any CPU
-		{ED2BE024-1DEB-450B-BE56-442056460B61}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{ED2BE024-1DEB-450B-BE56-442056460B61}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{ED2BE024-1DEB-450B-BE56-442056460B61}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{ED2BE024-1DEB-450B-BE56-442056460B61}.Release|Any CPU.Build.0 = Release|Any CPU
-		{29D8A0E0-2B2A-4E1E-9408-DE216E6FB93D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{29D8A0E0-2B2A-4E1E-9408-DE216E6FB93D}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{29D8A0E0-2B2A-4E1E-9408-DE216E6FB93D}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{29D8A0E0-2B2A-4E1E-9408-DE216E6FB93D}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {0EDBD6EB-184C-4E0C-AC6F-016CA2DF08EB}
 	EndGlobalSection
 EndGlobal

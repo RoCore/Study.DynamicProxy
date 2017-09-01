@@ -19,11 +19,12 @@ namespace FastProxy
         private static Type InterceptorValuesType { get; } = typeof(InterceptionInformation);
         private static ConstructorInfo InterceptorValuesConstructor { get; } = typeof(InterceptionInformation).GetConstructor(new[] { typeof(object), typeof(object), typeof(string), typeof(object[]), typeof(Task<object>) });
         private static MethodInfo InvokeInterceptor { get; } = typeof(IInterceptor).GetMethod(nameof(IInterceptor.Invoke));
+        private static ConstructorInfo NewObject { get; } = typeof(object).GetConstructor(Type.EmptyTypes);
         #endregion
 
         public void Create(MethodInfo methodInfo, ProxyMethodBuilderTransientParameters transient)
         {
-            MethodAttributes attributes = methodInfo.Attributes;
+            var attributes = methodInfo.Attributes;
             if (transient.TypeBuilder.IsInterface)
             {
                 attributes = MethodAttributes.Public | MethodAttributes.Final | MethodAttributes.HideBySig | MethodAttributes.Virtual | MethodAttributes.NewSlot;
@@ -45,7 +46,6 @@ namespace FastProxy
                 throw new NotImplementedException();
             }
             var generator = method.GetILGenerator();
-
             var listType = typeof(object[]);
 
             //object[] items; {0}
@@ -69,14 +69,10 @@ namespace FastProxy
                 generator.Emit(OpCodes.Ldarg, i + 1); // method arg by index i + 1 since ldarg_0 == this
                 generator.Emit(OpCodes.Stelem_Ref); // items[x] = X;
             }
-
-            EmitDefaultValue(method.ReturnType, generator);
-            generator.Emit(OpCodes.Box, method.ReturnType);
-            generator.Emit(OpCodes.Call, EmptyTaskCall);
+            
             if (taskMethod == null)
             {
-                EmitDefaultValue(method.ReturnType, generator);
-                generator.Emit(OpCodes.Box, method.ReturnType);
+                generator.Emit(OpCodes.Newobj, NewObject);
                 generator.Emit(OpCodes.Call, EmptyTaskCall);
             }
             else
@@ -98,7 +94,7 @@ namespace FastProxy
 
             //interceptorValues = new InterceptorValues(this, [null|decorator], "[MethodName]", items, task);
             generator.Emit(OpCodes.Ldarg_0);
-            if (transient.InterceptorDecorator != null)
+            if (transient.SealedTypeDecorator != null)
             {
                 generator.Emit(OpCodes.Ldfld, transient.InterceptorDecorator);
             }
@@ -112,19 +108,25 @@ namespace FastProxy
             generator.Emit(OpCodes.Newobj, InterceptorValuesConstructor);
             generator.Emit(OpCodes.Stloc_2);
 
-            if (method.ReturnType != typeof(void))
-            {
-                generator.Emit(OpCodes.Ldarg_0);
-                generator.Emit(OpCodes.Ldfld, transient.InterceptorDecorator);
-                generator.Emit(OpCodes.Ldloc_2);
-                generator.Emit(OpCodes.Callvirt, InvokeInterceptor);
-                OpCode casting = method.ReturnType.GetTypeInfo().IsValueType ? OpCodes.Unbox_Any : OpCodes.Castclass;
-                generator.Emit(casting, method.ReturnType);
-            }
+            //proxy.invoke(...)
+            generator.Emit(OpCodes.Ldarg_0);
+            generator.Emit(OpCodes.Ldfld, transient.InterceptorDecorator);
+            generator.Emit(OpCodes.Ldloc_2);
+            generator.Emit(OpCodes.Callvirt, InvokeInterceptor);
+
 
             foreach (var item in transient.PostInvoke)
             {
                 item.Execute(transient.TypeBuilder, transient.SealedTypeDecorator, transient.InterceptorDecorator, methodInfo);
+            }
+
+            if (method.ReturnType == typeof(void))
+            {
+                generator.Emit(OpCodes.Pop);
+            }
+            else
+            {
+                generator.Emit(method.ReturnType.IsValueType ? OpCodes.Unbox_Any : OpCodes.Castclass, method.ReturnType);
             }
 
             generator.Emit(OpCodes.Ret);
@@ -153,13 +155,13 @@ namespace FastProxy
             }
             generator.Emit(OpCodes.Ldloc_0); //items
 
-            for (int i = 0; i < parameters.Length; i++)
+            for (var i = 0; i < parameters.Length; i++)
             {
                 generator.Emit(OpCodes.Ldc_I4, i);
                 generator.Emit(OpCodes.Ldelem_Ref);
                 if (parameters[i].ParameterType != typeof(object))
                 {
-                    OpCode casting = parameters[i].ParameterType.GetTypeInfo().IsValueType ? OpCodes.Unbox_Any : OpCodes.Castclass;
+                    var casting = parameters[i].ParameterType.GetTypeInfo().IsValueType ? OpCodes.Unbox_Any : OpCodes.Castclass;
                     generator.Emit(casting, parameters[i].ParameterType);
                 }
             }
