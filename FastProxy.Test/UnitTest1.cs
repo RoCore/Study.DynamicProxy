@@ -51,10 +51,11 @@ namespace FastProxy.Test
 
         public sealed class Test3 : Test2
         {
+            private Test2 _deco;
             private object executeTest(object a)
             {
                 var lst = (object[])a;
-                return base.Test((string)lst[0],
+                return _deco.Test((string)lst[0],
                                  (object)lst[1],
                                  (object)lst[2],
                                  (object)lst[3],
@@ -127,7 +128,7 @@ namespace FastProxy.Test
                 return t;
             }
 
-            public int TestX()
+            public virtual int TestX()
             {
                 return 1;
             }

@@ -11,7 +11,9 @@ namespace FastProxy.Helpers
         public PropertyInfo[] Properties { get; set; }
         public MethodInfo[] Methods { get; set; }
         public FieldBuilder InterceptorInvoker { get; set; }
-        public bool IsInterfaceType { get; set; }
+        public bool IsInterface { get; set; }
+        public bool IsSealed { get; set; }
+        public bool IsAbstract { get; set; }
         public TypeBuilder ProxyType { get; set; }
         
 #if (!NETSTANDARD1_6)

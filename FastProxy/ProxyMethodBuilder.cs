@@ -25,7 +25,7 @@ namespace FastProxy
         public void Create(MethodInfo methodInfo, ProxyMethodBuilderTransientParameters transient)
         {
             var attributes = methodInfo.Attributes;
-            if (transient.TypeBuilder.IsInterface)
+            if (transient.TypeInfo.ProxyType.IsInterface)
             {
                 attributes = MethodAttributes.Public | MethodAttributes.Final | MethodAttributes.HideBySig | MethodAttributes.Virtual | MethodAttributes.NewSlot;
             }
@@ -34,9 +34,9 @@ namespace FastProxy
                 attributes = MethodAttributes.Public | MethodAttributes.HideBySig | MethodAttributes.Virtual | MethodAttributes.NewSlot;
             }
             var parameters = methodInfo.GetParameters();
-            var method = transient.TypeBuilder.DefineMethod(methodInfo.Name, attributes, methodInfo.CallingConvention, methodInfo.ReturnType, parameters.Select(a => a.ParameterType).ToArray());
+            var method = transient.TypeInfo.ProxyType.DefineMethod(methodInfo.Name, attributes, methodInfo.CallingConvention, methodInfo.ReturnType, parameters.Select(a => a.ParameterType).ToArray());
             MethodBuilder taskMethod = null;
-            if ((methodInfo.IsAbstract || transient.TypeBuilder.IsInterface) == false)
+            if (methodInfo.IsAbstract == false && (transient.TypeInfo.IsInterface == false || transient.TypeInfo.IsSealed))
             {
                 taskMethod = CreateBaseCallForTask(method, parameters, transient);
             }
@@ -47,7 +47,6 @@ namespace FastProxy
             }
             var generator = method.GetILGenerator();
             var listType = typeof(object[]);
-
             //object[] items; {0}
             generator.DeclareLocal(listType);
             //Task<object> task; {1}
@@ -57,19 +56,19 @@ namespace FastProxy
 
             foreach (var item in transient.PreInit)
             {
-                item.Execute(transient.TypeBuilder, transient.SealedTypeDecorator, transient.InterceptorDecorator, methodInfo, transient.PreInvoke, transient.PostInvoke);
+                item.Execute(transient.TypeInfo.ProxyType, transient.TypeInfo.Decorator, transient.TypeInfo.InterceptorInvoker, methodInfo, transient.PreInvoke, transient.PostInvoke);
             }
             generator.Emit(OpCodes.Ldc_I4, parameters.Length);
             generator.Emit(OpCodes.Newarr, typeof(object));
             generator.Emit(OpCodes.Stloc_0);
-            for (int i = 0; i < parameters.Length; i++)
+            for (var i = 0; i < parameters.Length; i++)
             {
                 generator.Emit(OpCodes.Ldloc_0); //items.
                 generator.Emit(OpCodes.Ldc_I4, i);
                 generator.Emit(OpCodes.Ldarg, i + 1); // method arg by index i + 1 since ldarg_0 == this
                 generator.Emit(OpCodes.Stelem_Ref); // items[x] = X;
             }
-            
+
             if (taskMethod == null)
             {
                 generator.Emit(OpCodes.Newobj, NewObject);
@@ -89,14 +88,15 @@ namespace FastProxy
 
             foreach (var item in transient.PreInvoke)
             {
-                item.Execute(transient.TypeBuilder, transient.SealedTypeDecorator, transient.InterceptorDecorator, methodInfo, transient.PostInvoke);
+                item.Execute(transient.TypeInfo.ProxyType, transient.TypeInfo.Decorator, transient.TypeInfo.InterceptorInvoker, methodInfo, transient.PostInvoke);
             }
 
             //interceptorValues = new InterceptorValues(this, [null|decorator], "[MethodName]", items, task);
             generator.Emit(OpCodes.Ldarg_0);
-            if (transient.SealedTypeDecorator != null)
+            if (transient.TypeInfo.Decorator != null)
             {
-                generator.Emit(OpCodes.Ldfld, transient.InterceptorDecorator);
+                generator.Emit(OpCodes.Ldarg_0);
+                generator.Emit(OpCodes.Ldfld, transient.TypeInfo.Decorator);
             }
             else
             {
@@ -110,14 +110,14 @@ namespace FastProxy
 
             //proxy.invoke(...)
             generator.Emit(OpCodes.Ldarg_0);
-            generator.Emit(OpCodes.Ldfld, transient.InterceptorDecorator);
+            generator.Emit(OpCodes.Ldfld, transient.TypeInfo.InterceptorInvoker);
             generator.Emit(OpCodes.Ldloc_2);
             generator.Emit(OpCodes.Callvirt, InvokeInterceptor);
 
 
             foreach (var item in transient.PostInvoke)
             {
-                item.Execute(transient.TypeBuilder, transient.SealedTypeDecorator, transient.InterceptorDecorator, methodInfo);
+                item.Execute(transient.TypeInfo.ProxyType, transient.TypeInfo.Decorator, transient.TypeInfo.InterceptorInvoker, methodInfo);
             }
 
             if (method.ReturnType == typeof(void))
@@ -128,6 +128,7 @@ namespace FastProxy
             {
                 generator.Emit(method.ReturnType.IsValueType ? OpCodes.Unbox_Any : OpCodes.Castclass, method.ReturnType);
             }
+            EmitDefaultValue(method.ReturnType, generator);
 
             generator.Emit(OpCodes.Ret);
             transient.MethodCreationCounter++;
@@ -135,7 +136,7 @@ namespace FastProxy
 
         private MethodBuilder CreateBaseCallForTask(MethodInfo baseMethod, ParameterInfo[] parameters, ProxyMethodBuilderTransientParameters transient)
         {
-            var result = transient.TypeBuilder.DefineMethod(string.Concat(baseMethod.Name, "_Execute_", transient.MethodCreationCounter), MethodAttributes.Private | MethodAttributes.HideBySig, typeof(object), new[] { typeof(object) });
+            var result = transient.TypeInfo.ProxyType.DefineMethod(string.Concat(baseMethod.Name, "_Execute_", transient.MethodCreationCounter), MethodAttributes.Private | MethodAttributes.HideBySig, typeof(object), new[] { typeof(object) });
 
             var generator = result.GetILGenerator();
 
@@ -148,10 +149,10 @@ namespace FastProxy
             }
             var methodCall = OpCodes.Call;
             generator.Emit(OpCodes.Ldarg_0); //base.
-            if (transient.SealedTypeDecorator != null)
+            if (transient.TypeInfo.Decorator != null)
             {
                 methodCall = OpCodes.Callvirt;
-                generator.Emit(OpCodes.Ldfld, transient.SealedTypeDecorator); //_decorator
+                generator.Emit(OpCodes.Ldfld, transient.TypeInfo.Decorator); //_decorator
             }
             generator.Emit(OpCodes.Ldloc_0); //items
 

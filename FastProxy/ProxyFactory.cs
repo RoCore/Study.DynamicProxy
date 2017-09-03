@@ -99,16 +99,13 @@ namespace FastProxy
 
                     var input = new ProxyMethodBuilderTransientParameters
                     {
-                        TypeBuilder = type.ProxyType,
-                        SealedTypeDecorator = type.Decorator,
-                        InterceptorDecorator = type.InterceptorInvoker,
+                        TypeInfo = type,
                         MethodCreationCounter = 0,
                         PreInit = new List<IBeforeCollectInterceptorInformation>(_preInit),
                         PreInvoke = new List<IBeforeInvokeInterceptor>(_preInvoke),
-                        PostInvoke = new List<IAfterInvokeInterceptor>(_postInvoke)
+                        PostInvoke = new List<IAfterInvokeInterceptor>(_postInvoke),
                     };
-
-
+                    
                     foreach (var item in type.Methods)
                     {
                         _methodBuilder.Create(item, input);

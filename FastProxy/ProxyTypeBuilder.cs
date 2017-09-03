@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Linq;
 #if (!NETSTANDARD1_6)
 using System.Diagnostics.SymbolStore;
 #endif
@@ -17,7 +18,6 @@ namespace FastProxy
 
         public ProxyTypeBuilderTransientParameters Create(Type abstractType, Type concreteType, Type interceptorType, ModuleBuilder moduleBuilder, string postfix)
         {
-            var result = new ProxyTypeBuilderTransientParameters();
             if (abstractType == null)
             {
                 throw new MissingConstructionInformation(nameof(abstractType), MissingConstructionInformation.TypeDefintion.AbstractType);
@@ -34,11 +34,16 @@ namespace FastProxy
             {
                 throw new MissingConstructionInformation(nameof(moduleBuilder), MissingConstructionInformation.TypeDefintion.ModuleBuilder);
             }
+            var typeInfoImplemented = concreteType;
+            var result = new ProxyTypeBuilderTransientParameters
+            {
+                IsInterface = typeInfoImplemented.IsInterface,
+                IsSealed = typeInfoImplemented.IsSealed,
+                IsAbstract = typeInfoImplemented.IsAbstract,
 #if (!NETSTANDARD2_0)
-            result.SymbolDocument = moduleBuilder.DefineDocument(abstractType.FullName + ".il", SymDocumentType.Text, SymLanguageType.ILAssembly, SymLanguageVendor.Microsoft);
+                SymbolDocument = moduleBuilder.DefineDocument(abstractType.FullName + ".il", SymDocumentType.Text, SymLanguageType.ILAssembly, SymLanguageVendor.Microsoft)
 #endif
-            var typeInfoImplemented = concreteType.GetTypeInfo();
-            result.IsInterfaceType = typeInfoImplemented.IsInterface;
+            };
             var defaultConstructorImplemented = false;
             if (typeInfoImplemented.IsClass && typeInfoImplemented.IsSealed && abstractType == concreteType)
             {
@@ -58,15 +63,17 @@ namespace FastProxy
                     result.ProxyType = moduleBuilder.DefineType(string.Concat(ProxyPrefix, abstractType.Name, postfix), TypeAttributes.Public | TypeAttributes.Class, concreteType);
                     result.ProxyType.SetParent(abstractType);
                 }
-                if (abstractType.IsInterface)
+                if (concreteType.IsInterface)
                 {
-                    result.Methods = abstractType.GetMethods();
-                    result.Properties = abstractType.GetProperties();
+                    result.Methods = concreteType.GetMethods();
+                    result.Properties = concreteType.GetProperties();
                 }
                 else
                 {
-                    result.Methods = abstractType.GetMethods(BindingFlags.Instance);
-                    result.Properties = abstractType.GetProperties(BindingFlags.Instance | BindingFlags.Public);
+                    var methods = abstractType.GetMethods().ToDictionary(a => a.Name);
+                    var properties = abstractType.GetProperties().ToDictionary(a => a.Name);
+                    result.Methods = concreteType.GetMethods().Where(a => methods.ContainsKey(a.Name)).ToArray();
+                    result.Properties = concreteType.GetProperties().Where(a => properties.ContainsKey(a.Name)).ToArray();
                 }
             }
             else if (typeInfoImplemented.IsInterface)
@@ -78,7 +85,7 @@ namespace FastProxy
             }
             else
             {
-                //TODO struct
+                //TODO 
                 throw new NotImplementedException();
             }
 

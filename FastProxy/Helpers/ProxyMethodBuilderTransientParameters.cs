@@ -6,13 +6,10 @@ namespace FastProxy.Helpers
 {
     public class ProxyMethodBuilderTransientParameters
     {
+        public ProxyTypeBuilderTransientParameters TypeInfo { get; set; }
         public List<IBeforeCollectInterceptorInformation> PreInit { get; set; }
         public List<IBeforeInvokeInterceptor> PreInvoke { get; set; }
         public List<IAfterInvokeInterceptor> PostInvoke { get; set; }
-
-        public TypeBuilder TypeBuilder { get; set; }
-        public FieldBuilder SealedTypeDecorator { get; set; }
-        public FieldBuilder InterceptorDecorator { get; set; }
         public int MethodCreationCounter { get; set; }
     }
 }
